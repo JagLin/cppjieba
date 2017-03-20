@@ -15,23 +15,24 @@ class KeywordExtractor {
  public:
   struct Word {
     string word;
+    string pos;
     vector<size_t> offsets;
     double weight;
   }; // struct Word
 
-  KeywordExtractor(const string& dictPath, 
-        const string& hmmFilePath, 
-        const string& idfPath, 
-        const string& stopWordPath, 
-        const string& userDict = "") 
+  KeywordExtractor(const string& dictPath,
+        const string& hmmFilePath,
+        const string& idfPath,
+        const string& stopWordPath,
+        const string& userDict = "")
     : segment_(dictPath, hmmFilePath, userDict) {
     LoadIdfDict(idfPath);
     LoadStopWordDict(stopWordPath);
   }
-  KeywordExtractor(const DictTrie* dictTrie, 
+  KeywordExtractor(const DictTrie* dictTrie,
         const HMMModel* model,
-        const string& idfPath, 
-        const string& stopWordPath) 
+        const string& idfPath,
+        const string& stopWordPath)
     : segment_(dictTrie, model) {
     LoadIdfDict(idfPath);
     LoadStopWordDict(stopWordPath);
@@ -56,19 +57,34 @@ class KeywordExtractor {
   }
 
   void Extract(const string& sentence, vector<Word>& keywords, size_t topN) const {
-    vector<string> words;
-    segment_.Cut(sentence, words);
+    vector<pair<string, string> > tagResult;
+    segment_.Tag(sentence,tagResult);
+    for(size_t i=0;i<tagResult.size();++i){
+      //dirty solution for pos tagging module...
+      trim(tagResult[i].second);
+      //XLOG(DEBUG) << tagResult[i].first << ":" << tagResult[i].second << endl;
+    }
+
+    // should be parameterized
+    set<string> posSet;
+    posSet.insert("n");
+    posSet.insert("v");
+    posSet.insert("a");
+    posSet.insert("nr");
+    posSet.insert("eng");
 
     map<string, Word> wordmap;
     size_t offset = 0;
-    for (size_t i = 0; i < words.size(); ++i) {
+    for (size_t i = 0; i < tagResult.size(); ++i) {
       size_t t = offset;
-      offset += words[i].size();
-      if (IsSingleWord(words[i]) || stopWords_.find(words[i]) != stopWords_.end()) {
+      offset += tagResult[i].first.size();
+      bool notFoundPos = !(std::find(posSet.begin(), posSet.end(), tagResult[i].second) != posSet.end());
+      if (IsSingleWord(tagResult[i].first) || stopWords_.find(tagResult[i].first) != stopWords_.end() || notFoundPos) {
         continue;
       }
-      wordmap[words[i]].offsets.push_back(t);
-      wordmap[words[i]].weight += 1.0;
+      wordmap[tagResult[i].first].offsets.push_back(t);
+      wordmap[tagResult[i].first].weight += 1.0;
+      wordmap[tagResult[i].first].pos = tagResult[i].second;
     }
     if (offset != sentence.size()) {
       XLOG(ERROR) << "words illegal";
@@ -91,7 +107,10 @@ class KeywordExtractor {
     partial_sort(keywords.begin(), keywords.begin() + topN, keywords.end(), Compare);
     keywords.resize(topN);
   }
- private:
+private:
+  void trim(string& s, const string& delimiters = " \f\n\r\t\v" ) const {
+      s.erase( s.find_last_not_of( delimiters ) + 1 ).erase( 0, s.erase( s.find_last_not_of( delimiters ) + 1 ).find_first_not_of( delimiters ) );
+  }
   void LoadIdfDict(const string& idfPath) {
     ifstream ifs(idfPath.c_str());
     XCHECK(ifs.is_open()) << "open " << idfPath << " failed";
@@ -143,7 +162,7 @@ class KeywordExtractor {
 }; // class KeywordExtractor
 
 inline ostream& operator << (ostream& os, const KeywordExtractor::Word& word) {
-  return os << "{\"word\": \"" << word.word << "\", \"offset\": " << word.offsets << ", \"weight\": " << word.weight << "}"; 
+  return os << "{\"word\": \"" << word.word << "\", \"offset\": " << word.offsets << ", \"weight\": " << word.weight << ", \"pos\": " << word.pos << "}";
 }
 
 } // namespace cppjieba
