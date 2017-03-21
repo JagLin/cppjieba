@@ -71,7 +71,7 @@ class KeywordExtractor {
     posSet.insert("v");
     posSet.insert("a");
     posSet.insert("nr");
-    posSet.insert("eng");
+    //posSet.insert("eng");
 
     map<string, Word> wordmap;
     size_t offset = 0;
